@@ -2,22 +2,31 @@
 #include <consoleapi.h>
 #include <iostream>
 #include <Psapi.h>
+#include <algorithm>
+#include <cctype>
 
-static bool b_Running;
-const static int iSleepTime = 10000;
-const static int iRenderLibraryCount = 2;
+static bool b_running;
+const static int i_sleeptime = 10000;
 const static std::string lpszRenderLibraries[2] =
 {
 	"libEGL",
-	"D3DX"
+	"D3D"
 };
 
 BOOL WINAPI HandlerRoutine(_In_ DWORD dwCtrlType)
 {
 	std::cout << "exiting...\n";
 	SetConsoleCtrlHandler(HandlerRoutine, 0);
-	b_Running = false;
+	b_running = false;
 	return 0;
+}
+
+bool IsMatchCaseInsensitive(std::string str1, std::string str2)
+{
+	std::transform(str1.begin(), str1.end(), str1.begin(), [](unsigned char c) { return std::toupper(c); });
+	std::transform(str2.begin(), str2.end(), str2.begin(), [](unsigned char c) { return std::toupper(c); });
+
+	return str1.find(str2) != std::string::npos;
 }
 
 bool IsRenderLibraryLoaded(DWORD dwProcessId)
@@ -39,9 +48,11 @@ bool IsRenderLibraryLoaded(DWORD dwProcessId)
 			{
 				if (GetModuleBaseNameA(hProcess, lphLoadedModules[i], szModuleName, sizeof(szModuleName)))
 				{
+					int iRenderLibraryCount = sizeof(lpszRenderLibraries) / sizeof(std::string);
+
 					for (int j = 0; j < iRenderLibraryCount; j++)
 					{
-						if (std::string(szModuleName).find(lpszRenderLibraries[j]) != std::string::npos)
+						if (IsMatchCaseInsensitive(std::string(szModuleName), std::string(lpszRenderLibraries[j])))
 						{
 							return true;
 						}
@@ -62,7 +73,6 @@ bool IsRenderLibraryLoaded(DWORD dwProcessId)
 int main(char* argc, char** argv)
 {
 	SetConsoleCtrlHandler(HandlerRoutine, 1);
-	b_Running = true;
 
 	DWORD lpdwProcessIds[1024];
 	DWORD dwProcessIdsCount;
@@ -70,9 +80,9 @@ int main(char* argc, char** argv)
 	HINSTANCE hShellResult;
 	bool bLastState = true;
 
-	std::cout << "gaming power plan monitor v0.1\n";
+	std::cout << "gaming power plan monitor v0.2\n";
 
-	while (b_Running)
+	do
 	{
 		bool bRenderLibraryLoaded = false;
 
@@ -85,7 +95,7 @@ int main(char* argc, char** argv)
 				bRenderLibraryLoaded |= IsRenderLibraryLoaded(lpdwProcessIds[i]);
 			}
 
-			if (bLastState != bRenderLibraryLoaded)
+			if (bLastState != bRenderLibraryLoaded || !b_running)
 			{
 				bRenderLibraryLoaded ?
 					std::cout << "there appears to be a rendering library loaded, switching to max performance...\n" :
@@ -104,6 +114,7 @@ int main(char* argc, char** argv)
 			std::cout << "encountered error code " << GetLastError() << " while attempting to enumerate processes\n";
 		}
 
-		Sleep(iSleepTime);
-	}
+		Sleep(i_sleeptime);
+		b_running = true;
+	} while (b_running);
 }
